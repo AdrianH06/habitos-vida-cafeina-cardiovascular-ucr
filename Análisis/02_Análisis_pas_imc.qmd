@@ -1,0 +1,221 @@
+---
+title: "02. Análisis de modelo de presión arterial sistólica con IMC"
+format: pdf
+editor: visual
+---
+
+## Librerías
+
+```{r}
+library(here)
+library(dplyr)
+library(modelsummary)
+library(ggplot2)
+library(car)
+library(corrgram)
+library(lattice)
+library(lmtest)
+library(MASS)
+```
+
+## Ruta y Datos
+
+```{r}
+RUTA <- here("Datos", "Datos_limpios.rds")
+Datos <- readRDS(RUTA)
+```
+
+### Ajuste de tipo de datos en factoress
+
+```{r}
+Datos$Genero <- factor(Datos$Genero, levels = c("Masculino","Femenino"))
+```
+
+Originalmente la variable Consumo_nicotina_frecuencia contaba con 7 categorías: "no consume nicotina"; "nicotina sin combustión de 1 a 3 días"; "nicotina sin combustión de 4 a 6 días"; "nicotina sin combustión diariamente; "nicotina con combustión de 1 a 3 días";"nicotina con combustión de 4 a 6 días" y "nicotina con combustión diariamente". No obstante al tener categorías con cero observaciones y un des balance tan pronunciado se optó por reducirlo a sólo 3 categorías: "No consume nicotina"; "Nicotina sin combustión" y "Nicotina con combustión".
+
+```{r}
+Datos <- Datos %>%
+  mutate(Consumo_nicotina_frecuencia = case_when(Consumo_nicotina_frecuencia == "No consume nicotina" ~ "No consume nicotina", startsWith(Consumo_nicotina_frecuencia, "No Combustión") ~ "Nicotina sin combustion", TRUE ~ "Nicotina con combustion")) 
+
+Datos$Consumo_nicotina_frecuencia <- factor(Datos$Consumo_nicotina_frecuencia, levels = c("No consume nicotina", "Nicotina sin combustion", "Nicotina con combustion"))
+```
+
+## Modelo para la Presión Arterial Sistólica (PAS)
+
+### Ajuste del primer modelo
+
+Se ajusta el modelo con todas las variables excepto el diagnóstico previo de hipertensión, ya que el 100% de la muestra dijo no tener diagnóstico previo y por lo tanto la variable no puede aportar ninguna información.
+
+```{r}
+mod_PAS <- lm(PAS_mmHg ~ Edad_anios + Genero + IMC + Horas_sueno +
+                  Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana +
+                  Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora +
+                  Cafeina_total_mg_semana*Consumo_nicotina_frecuencia +
+                  Cafeina_total_mg_semana*Tiempo_desde_ultima_ingesta_horas +
+                  Genero*IMC,
+                data = Datos)
+```
+
+```{r}
+n = nrow(Datos)
+p_pas = length(coef(mod_PAS))
+c(parametros = p_pas, obs_por_parametro = n / p_pas)
+```
+
+### Análisis de residuales estudentizados y casos de influencia
+
+No se identificaron valores extremos en la respuesta, ya que ningún residual superó el valor crítico de Bonferroni.
+Ninguna observación alcanzó la primera línea de referencia de la distancia de Cook, por lo que no hay observaciones con influencia global.
+Algunas observaciones superaron los límites de DFFITS y DFBETAS, no obstante, al reajustar el modelo sin ellas, los coeficientes cambiaron de manera muy leve y las conclusiones se mantuvieron.
+Por lo tanto, no se eliminó ninguna observación.
+
+### Residuales Estudentizados
+
+```{r}
+t_pas = rstudent(mod_PAS)
+tc_pas = qt(1 - 0.05/(2*n), n - p_pas - 1)
+plot(t_pas, ylab = "Residual estudentizado"); abline(h = c(-tc_pas, tc_pas), col = 2)
+Datos$t_pas = t_pas
+subset(Datos, abs(t_pas) > tc_pas)
+```
+
+### DFFITS
+
+```{r}
+plot(abs(dffits(mod_PAS)), ylab = "DFFITS")
+abline(h = 2*sqrt((p_pas + 1)/(n - p_pas - 1)), col = 2)
+```
+
+### Distancia de Cook
+
+```{r}
+plot(cooks.distance(mod_PAS), ylab = "Distancia de Cook")
+abline(h = qf(c(0.1, 0.2, 0.5), p_pas, n - p_pas), col = c(1, 4, 2))
+```
+
+### DFBETAS
+
+```{r}
+dfb_pas = dfbetas(mod_PAS)
+
+plot(abs(dfb_pas[, 2]), main = colnames(dfb_pas)[2], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 3]), main = colnames(dfb_pas)[3], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 4]), main = colnames(dfb_pas)[4], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 5]), main = colnames(dfb_pas)[5], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 6]), main = colnames(dfb_pas)[6], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 7]), main = colnames(dfb_pas)[7], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 8]), main = colnames(dfb_pas)[8], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 9]), main = colnames(dfb_pas)[9], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 10]), main = colnames(dfb_pas)[10], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 11]), main = colnames(dfb_pas)[11], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 12]), main = colnames(dfb_pas)[12], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 13]), main = colnames(dfb_pas)[13], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 14]), main = colnames(dfb_pas)[14], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pas[, 15]), main = colnames(dfb_pas)[15], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+```
+
+### Verificación de supuestos del modelo
+
+El modelo inicial `mod_PAS` cumplió con todos los supuestos: Homocedasticidad, Normalidad, Multicolinealidad y Linealidad.
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_PAS$fit, mod_PAS$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_PAS, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_PAS$res, ylab = "Residuales")
+
+shapiro.test(mod_PAS$res)
+```
+
+### Ajuste de modelo sin interacciones para verificación de supuestos
+
+```{r}
+mod_PAS_no_in <- lm(PAS_mmHg ~ Edad_anios + Genero + IMC + Horas_sueno +
+                  Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana +
+                  Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora,
+                data = Datos)
+```
+
+#### Multicolinealidad
+
+```{r}
+vif(mod_PAS_no_in)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_PAS_no_in, main = "Residuales parciales", ylab = "")
+```
+
+## Selección de variables y ajuste de modelo final
+
+```{r}
+mod_PAS_final = step(mod_PAS, direction = "backward", test = "F")
+summary(mod_PAS_final)
+```
+
+Se realizó el proceso con la función `stepAIC` con `backward` que conservó el género y el IMC.
+Edad, horas de sueño, tiempo desde la última ingesta, cafeína, actividad física, nicotina y hora de medición no mejoraron el modelo.
+Al analizar con detalle el procedimiento llevado a cabo por la función, se llega a la misma conclusión y por tanto se conserva el modelo resultante.
+Las mujeres presentaron una PAS menor que los hombres con igual IMC, y un mayor IMC se asoció con una mayor PAS.
+
+### Análisis del modelo final
+
+```{r}
+mod_PAS2 <- lm(PAS_mmHg ~ Genero + IMC, data = Datos)
+```
+
+### Verificación de supuestos del modelo
+
+El modelo final `mod_PAS2` cumplió con todos los supuestos: Homocedasticidad, Normalidad, Multicolinealidad y Linealidad.
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_PAS2$fit, mod_PAS2$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_PAS2, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_PAS2$res, ylab = "Residuales")
+
+shapiro.test(mod_PAS2$res)
+```
+
+#### Multicolinealidad
+
+```{r}
+vif(mod_PAS2)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_PAS2, main = "Residuales parciales", ylab = "")
+```
+
+### Análisis Final e Intervalos de Confianza
+
+```{r}
+summary(mod_PAS2)
+round(confint(mod_PAS2), 3)
+```
+
+Manteniendo el IMC constante, la presión arterial sistólica (PAS) promedio de las mujeres es 17.6 mmHg menor que la de los hombres.
+Con un 95% de confianza, se espera que las mujeres tengan una PAS promedio entre 13.58 y 21.62 mmHg por debajo de la de los hombres con ese mismo nivel de IMC.
+
+Por cada unidad de aumento en el IMC, la presión arterial sistólica promedio aumenta en 0.817 mmHg, asumiendo que se compara a personas del mismo género.
+Con un 95% de confianza, este incremento promedio en la PAS se ubica entre 0.381 y 1.253 mmHg por cada punto extra de IMC.
+
+El género y el IMC en conjunto logran explicar el 45.72% de la variabilidad total observada en la presión arterial sistólica.

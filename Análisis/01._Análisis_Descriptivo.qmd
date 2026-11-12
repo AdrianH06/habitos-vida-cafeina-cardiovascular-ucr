@@ -1,0 +1,185 @@
+---
+title: "01. Análisis Descriptivo"
+format: pdf
+editor: visual
+---
+
+## Librerías
+
+```{r}
+library(here)
+library(dplyr)
+library(modelsummary)
+library(ggplot2)
+library(car)
+library(corrgram)
+library(lattice)
+library(lmtest)
+library(MASS)
+```
+
+## Ruta y Datos
+
+```{r}
+RUTA <- here("Datos", "Datos_Limpios.rds")
+Datos <- readRDS(RUTA)
+```
+
+### Ajuste de tipo de datos en factores
+
+```{r}
+Datos$Genero <- factor(Datos$Genero, levels = c("Masculino","Femenino"))
+```
+
+Originalmente la variable Consumo_nicotina_frecuencia contaba con 7 categorías: "no consume nicotina"; "nicotina sin combustión de 1 a 3 días"; "nicotina sin combustión de 4 a 6 días"; "nicotina sin combustión diariamente; "nicotina con combustión de 1 a 3 días";"nicotina con combustión de 4 a 6 días" y "nicotina con combustión diariamente". No obstante al tener categorías con cero observaciones y un des balance tan pronunciado se optó por reducirlo a sólo 3 categorías: "No consume nicotina"; "Nicotina sin combustión" y "Nicotina con combustión".
+
+```{r}
+Datos <- Datos %>%
+  mutate(Consumo_nicotina_frecuencia = case_when(Consumo_nicotina_frecuencia == "No consume nicotina" ~ "No consume nicotina", startsWith(Consumo_nicotina_frecuencia, "No Combustión") ~ "Nicotina sin combustion", TRUE ~ "Nicotina con combustion")) 
+
+Datos$Consumo_nicotina_frecuencia <- factor(Datos$Consumo_nicotina_frecuencia, levels = c("No consume nicotina", "Nicotina sin combustion", "Nicotina con combustion"))
+```
+
+## Análisis descriptivo
+
+En este análisis descriptivo se analizarán todas las variables presentes en Datos, no obstante no se realizará el análisis de ID_participante, ya que es una variable de control y no aporta información relevante para el análisis.
+Tampoco se realizará el análisis de la variable Diagnostico_previo_hipertension, debido a que el 100% de la muestra no presentó un diagnóstico previo de hipertensión y por lo tanto la variable es incapaz de aportar información nueva o relevante.
+
+### Estadísticos descriptivos de las distintas variables
+
+```{r}
+datasummary_skim(Datos, type = "numeric") 
+```
+
+```{r}
+datasummary_skim(Datos, type = "categorical")
+```
+
+### Gráficos exploratorios de variables numéricas
+
+```{r}
+par(mfrow = c(1,2))
+hist(Datos$Edad_anios, main = "Edad", xlab = "años", col = "cadetblue3")
+hist(Datos$IMC, main = "IMC", xlab = "kg/m²", col = "cadetblue3")
+
+par(mfrow = c(1,2))
+hist(Datos$Altura_cm, main = "altura", xlab = "cm", col = "cadetblue3")
+hist(Datos$Peso_kg, main = "peso", xlab = "kg", col = "cadetblue3")
+
+par(mfrow = c(1,3))
+hist(Datos$Hora, main = "Hora de medición", xlab = "hora del día", col = "darkseagreen2")
+hist(Datos$Tiempo_desde_ultima_ingesta_horas, main = "Tiempo desde última ingesta", xlab = "horas", col = "darkseagreen2")
+hist(Datos$Horas_sueno, main = "Horas de sueño", xlab = "horas", col = "darkseagreen2")
+
+par(mfrow = c(1,2))
+hist(Datos$Cafeina_total_mg_semana, main = "Cafeína", xlab = "mg/semana", col = "slategray2")
+hist(Datos$Godin_Shephard_score, main = "Godin-Shephard", xlab = "puntaje", col = "slategray2")
+
+par(mfrow = c(1,3))
+hist(Datos$PAS_mmHg, main = "PAS", xlab = "mmHg", col = "darkseagreen3")
+hist(Datos$PAD_mmHg, main = "PAD", xlab = "mmHg", col = "darkseagreen3")
+hist(Datos$FC_lpm, main = "Frecuencia cardíaca", xlab = "lpm", col = "darkseagreen3")
+```
+
+### Gráficos exploratorios de variables categóricas
+
+```{r}
+par(mfrow = c(2,3))
+boxplot(PAS_mmHg ~ Genero, data = Datos, main = "PAS por género", col = "salmon")
+boxplot(PAD_mmHg ~ Genero, data = Datos, main = "PAD por género", col = "salmon")
+boxplot(FC_lpm ~ Genero, data = Datos, main = "FC por género", col = "salmon")
+boxplot(PAS_mmHg ~ Consumo_nicotina_frecuencia, data = Datos, main = "PAS por nicotina", cex.axis = 0.6, col = "skyblue3")
+boxplot(PAD_mmHg ~ Consumo_nicotina_frecuencia, data = Datos, main = "PAD por nicotina", cex.axis = 0.6, col = "skyblue3")
+boxplot(FC_lpm ~ Consumo_nicotina_frecuencia, data = Datos, main = "FC por nicotina", cex.axis = 0.6, col = "skyblue3")
+```
+
+La variable Consumo_nicotina_frecuencia se trabajará de forma continua en el análisis, no obstante se realiza una tabla donde se explora una re codificación categórica para analizar de mejor manera la forma en que se distribuyen los datos en dicha variable.
+
+```{r}
+Datos$Tiempo_grupo <- cut(Datos$Tiempo_desde_ultima_ingesta_horas,
+                         breaks = c(-Inf, 7, 24, Inf),
+                         labels = c("7 h o menos", "7 a 24 h", "Más de 24 h"))
+
+table(Datos$Tiempo_grupo)
+table(Datos$Consumo_nicotina_frecuencia)
+```
+
+## Comportamiento y disperción de los datos con las distintas variables de respuesta
+
+### Presión sistólica
+
+```{r}
+with(Datos, scatterplot(Edad_anios, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "Edad (años)"))
+with(Datos, scatterplot(IMC, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "IMC (kg/m^2)"))
+with(Datos, scatterplot(Cafeina_total_mg_semana, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "Cafeína (mg/sem)"))
+with(Datos, scatterplot(Tiempo_desde_ultima_ingesta_horas, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "Tiempo desde ingesta (h)"))
+with(Datos, scatterplot(Horas_sueno, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "Horas de sueño"))
+with(Datos, scatterplot(Godin_Shephard_score, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "Score Godin-Shephard"))
+with(Datos, scatterplot(Hora, PAS_mmHg, pch = 18, col = "steelblue", ylab = "PAS (mmHg)", xlab = "Hora de toma"))
+```
+
+### Presión diastólica
+
+```{r}
+with(Datos, scatterplot(Edad_anios, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "Edad (años)"))
+with(Datos, scatterplot(IMC, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "(IMC) kg/m^2"))
+with(Datos, scatterplot(Cafeina_total_mg_semana, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "Cafeína (mg/sem)"))
+with(Datos, scatterplot(Tiempo_desde_ultima_ingesta_horas, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "Tiempo desde ingesta (h)"))
+with(Datos, scatterplot(Horas_sueno, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "Horas de sueño"))
+with(Datos, scatterplot(Godin_Shephard_score, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "Score Godin-Shephard"))
+with(Datos, scatterplot(Hora, PAD_mmHg, pch = 18, col = "steelblue", ylab = "PAD (mmHg)", xlab = "Hora de toma"))
+```
+
+### Frecuencia cardiaca
+
+```{r}
+with(Datos, scatterplot(Edad_anios, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "Edad (años)"))
+with(Datos, scatterplot(IMC, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "IMC (kg/m^2"))
+with(Datos, scatterplot(Cafeina_total_mg_semana, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "Cafeína (mg/sem)"))
+with(Datos, scatterplot(Tiempo_desde_ultima_ingesta_horas, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "Tiempo desde ingesta (h)"))
+with(Datos, scatterplot(Horas_sueno, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "Horas de sueño"))
+with(Datos, scatterplot(Godin_Shephard_score, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "Score Godin-Shephard"))
+with(Datos, scatterplot(Hora, FC_lpm, pch = 18, col = "steelblue", ylab = "FC (l/min)", xlab = "Hora de toma"))
+```
+
+### Análisis de posible correlación mediante gráfico de calor de las variables numéricas
+
+Se optó por analizar con el método de spearman ya que no se realizará verificación de supuestos de normalidad
+
+```{r}
+predic_num <- c("Edad_anios", "IMC", "Horas_sueno", "Tiempo_desde_ultima_ingesta_horas",
+         "Cafeina_total_mg_semana", "Godin_Shephard_score", "Hora")
+
+matriz_cor <- cor(Datos[, predic_num], method = "spearman")
+
+corrgram(matriz_cor, order = TRUE, lower.panel = panel.shade, upper.panel = panel.cor)
+```
+
+## Exploración de la interacción con base en la literatura
+
+Con base en un riguroso análisis de antecedentes de la literatura científica, se llegó a la conclusión de que por la estructura y características de la muestra sólo se considerarán como posiblemente relevantes las interacciones entre la cafeína y el tiempo transcurrido desde la última ingesta de cafeína, ya que se sabe que la cafeína es sintetizada en un tiempo que va de 3 a 7 horas, por lo tanto las personas con un menor tiempo transcurrido desde la última Vez que ingirieron cafeína tendrán efectos más potentes en comparación a las que tengan más horas o incluso las que lleven mucho tiempo no tendrán ningún efecto de la cafeína a la hora de la medición; La interacción entre la cafeína y el consumo de nicotina, debido a que existe evidencia de que los hidrocarburos aromáticos policíclicos (HAPs), liberados por la combustión, inducen la actividad de la enzima CYP1A2, principal encargada de metabolizar la cafeína en el hígado, Por lo tanto se espera que las personas que consuman nicotina con combustión procesen la cafeína de forma más rápida; y la interacción entre el género y el peso e IMC, ya que los hombres suelen tener una masa corporal y un peso en kilogramos normalmente mayor al de las mujeres.
+En esta sección los limitamos al realizar un análisis gráfico exploratorio en donde únicamente se analizarán las interacciones con alguna variable categórica, no obstante, la verificación de estas interacciones, su análisis y las conclusiones respecto a las mismas, queda reservado para los modelos correspondientes.
+
+### Interacción entre consumo de nicotina y cantidad de cafeína
+
+```{r}
+xyplot(PAS_mmHg ~ Cafeina_total_mg_semana, groups = Consumo_nicotina_frecuencia, data = Datos, type = c("p","r"), auto.key = TRUE)
+xyplot(PAD_mmHg ~ Cafeina_total_mg_semana, groups = Consumo_nicotina_frecuencia, data = Datos, type = c("p","r"), auto.key = TRUE)
+xyplot(FC_lpm ~ Cafeina_total_mg_semana, groups = Consumo_nicotina_frecuencia, data = Datos, type = c("p","r"), auto.key = TRUE)
+```
+
+### Interacción entre Peso y género
+
+```{r}
+xyplot(PAS_mmHg ~ Peso_kg, groups = Genero, data = Datos, type = c("p","r"), auto.key = TRUE)
+xyplot(PAD_mmHg ~ Peso_kg, groups = Genero, data = Datos, type = c("p","r"), auto.key = TRUE)
+xyplot(FC_lpm ~ Peso_kg, groups = Genero, data = Datos, type = c("p","r"), auto.key = TRUE)
+```
+
+### Interacción entre IMC y género
+
+```{r}
+xyplot(PAS_mmHg ~ IMC, groups = Genero, data = Datos, type = c("p","r"), auto.key = TRUE)
+xyplot(PAD_mmHg ~ IMC, groups = Genero, data = Datos, type = c("p","r"), auto.key = TRUE)
+xyplot(FC_lpm ~ IMC, groups = Genero, data = Datos, type = c("p","r"), auto.key = TRUE)
+```

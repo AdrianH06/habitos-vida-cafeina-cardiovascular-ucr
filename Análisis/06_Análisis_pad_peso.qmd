@@ -1,0 +1,301 @@
+---
+title: "06. Análisis de modelo de presión arterial diastólica con peso"
+format: pdf
+editor: visual
+---
+
+## Librerías
+
+```{r}
+library(here)
+library(dplyr)
+library(modelsummary)
+library(ggplot2)
+library(car)
+library(corrgram)
+library(lattice)
+library(lmtest)
+library(MASS)
+```
+
+## Ruta y Datos
+
+```{r}
+RUTA <- here("Datos", "Datos_limpios.rds")
+Datos <- readRDS(RUTA)
+```
+
+### Ajuste de tipo de datos en factoress
+
+```{r}
+Datos$Genero <- factor(Datos$Genero, levels = c("Masculino","Femenino"))
+```
+
+Originalmente la variable Consumo_nicotina_frecuencia contaba con 7 categorías: "no consume nicotina"; "nicotina sin combustión de 1 a 3 días"; "nicotina sin combustión de 4 a 6 días"; "nicotina sin combustión diariamente; "nicotina con combustión de 1 a 3 días";"nicotina con combustión de 4 a 6 días" y "nicotina con combustión diariamente". No obstante al tener categorías con cero observaciones y un des balance tan pronunciado se optó por reducirlo a sólo 3 categorías: "No consume nicotina"; "Nicotina sin combustión" y "Nicotina con combustión".
+
+```{r}
+Datos <- Datos %>%
+  mutate(Consumo_nicotina_frecuencia = case_when(Consumo_nicotina_frecuencia == "No consume nicotina" ~ "No consume nicotina", startsWith(Consumo_nicotina_frecuencia, "No Combustión") ~ "Nicotina sin combustion", TRUE ~ "Nicotina con combustion")) 
+
+Datos$Consumo_nicotina_frecuencia <- factor(Datos$Consumo_nicotina_frecuencia, levels = c("No consume nicotina", "Nicotina sin combustion", "Nicotina con combustion"))
+```
+
+## Modelo para la Presión Arterial Sistólica (PAS)
+
+### Ajuste del primer modelo
+
+Se ajusta el modelo con todas las variables excepto el diagnóstico previo de hipertensión, ya que el 100% de la muestra dijo no tener diagnóstico previo y por lo tanto la variable no puede aportar ninguna información.
+
+```{r}
+mod_PAD <- lm(PAD_mmHg ~ Edad_anios + Genero + Altura_cm + Peso_kg + Horas_sueno +
+                  Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana +
+                  Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora +
+                  Cafeina_total_mg_semana*Consumo_nicotina_frecuencia +
+                  Cafeina_total_mg_semana*Tiempo_desde_ultima_ingesta_horas +
+                  Genero*Peso_kg, data = Datos)
+```
+
+```{r}
+n = nrow(Datos)
+p_pad = length(coef(mod_PAD))
+c(parametros = p_pad, obs_por_parametro = n / p_pad)
+```
+
+### Análisis de residuales estudentizados y casos de influencia
+
+No se identificaron valores extremos en la respuesta, ya que ningún residual superó el valor crítico de Bonferroni.
+Ninguna observación alcanzó la primera línea de referencia de la distancia de Cook, por lo que no hay observaciones con influencia global.
+Algunas observaciones superaron los límites de DFFITS y DFBETAS, no obstante, al reajustar el modelo sin ellas, los coeficientes cambiaron de manera muy leve y las conclusiones se mantuvieron.
+Por lo tanto, no se eliminó ninguna observación.
+
+### Residuales Estudentizados
+
+```{r}
+t_pad = rstudent(mod_PAD)
+tc_pad = qt(1 - 0.05/(2*n), n - p_pad - 1)
+plot(t_pad, ylab = "Residual estudentizado"); abline(h = c(-tc_pad, tc_pad), col = 2)
+Datos$t_pad = t_pad
+subset(Datos, abs(t_pad) > tc_pad)
+```
+
+### DFFITS
+
+```{r}
+plot(abs(dffits(mod_PAD)), ylab = "DFFITS")
+abline(h = 2*sqrt((p_pad + 1)/(n - p_pad - 1)), col = 2)
+```
+
+### Distancia de Cook
+
+```{r}
+plot(cooks.distance(mod_PAD), ylab = "Distancia de Cook")
+abline(h = qf(c(0.1, 0.2, 0.5), p_pad, n - p_pad), col = c(1, 4, 2))
+```
+
+### DFBETAS
+
+```{r}
+dfb_pad = dfbetas(mod_PAD)
+
+plot(abs(dfb_pad[, 2]), main = colnames(dfb_pad)[2], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 3]), main = colnames(dfb_pad)[3], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 4]), main = colnames(dfb_pad)[4], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 5]), main = colnames(dfb_pad)[5], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 6]), main = colnames(dfb_pad)[6], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 7]), main = colnames(dfb_pad)[7], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 8]), main = colnames(dfb_pad)[8], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 9]), main = colnames(dfb_pad)[9], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 10]), main = colnames(dfb_pad)[10], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 11]), main = colnames(dfb_pad)[11], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 12]), main = colnames(dfb_pad)[12], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 13]), main = colnames(dfb_pad)[13], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 14]), main = colnames(dfb_pad)[14], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 15]), main = colnames(dfb_pad)[15], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_pad[, 16]), main = colnames(dfb_pad)[16], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+```
+
+### Verificación de supuestos del modelo
+
+El modelo inicial `mod_PAD` cumplió con los supuestos de Normalidad, Multicolinealidad y Linealidad, pero incumplió el supuesto de Homocedasticidad
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_PAD$fit, mod_PAD$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_PAD, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_PAD$res, ylab = "Residuales")
+
+shapiro.test(mod_PAD$res)
+```
+
+### Ajuste de modelo sin interacciones para verificación de supuestos
+
+```{r}
+mod_PAD_no_in <- lm(PAD_mmHg ~ Edad_anios + Genero + Altura_cm + Peso_kg + Horas_sueno + Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana + Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora,data = Datos)
+```
+
+#### Multicolinealidad
+
+```{r}
+vif(mod_PAD_no_in)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_PAD_no_in, main = "Residuales parciales", ylab = "")
+```
+
+### Aplicación de transformación de Box-Cox
+
+```{r}
+bc_mod_PAD <- boxcox(mod_PAD)
+lambda_optimo_PAD <- bc_mod_PAD$x[which.max(bc_mod_PAD$y)]
+abline(v = 0, col = "red")
+
+lambda_optimo_PAD
+```
+
+Debido a que lambda es cercano a 0, se aplicó la transformación logarítmica a la variable respuesta.
+
+```{r}
+mod_PAD_trans <- lm(log(PAD_mmHg) ~ Edad_anios + Genero + Altura_cm + Peso_kg + Horas_sueno +
+                  Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana +
+                  Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora +
+                  Cafeina_total_mg_semana*Consumo_nicotina_frecuencia +
+                  Cafeina_total_mg_semana*Tiempo_desde_ultima_ingesta_horas +
+                  Genero*Peso_kg, data = Datos)
+```
+
+### Verificación de supuesto del modelo transformado
+
+```{r}
+plot(mod_PAD_trans$fit, mod_PAD_trans$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_PAD_trans, studentize = F)
+```
+
+El modelo completo de PAD presentó heterocedasticidad, y la transformación de Box-Cox no corrigío dicho supuesto.
+Por lo tanto, hay razones para suponer que la variabilidad podría estar asociada con algunos predictores.
+Dado que el objetivo era obtener un modelo parsimonioso, se realizó primero la selección de variables, aún con el incumplimiento del supuesto, luego se verificaron los supuestos del modelo resultante y este los cumplió.
+Lo anterior reafirma la hipótesis inicial de que la variabilidad probablemente se debía a algunos de los predictores y al estos predictores no estar presentes en el modelo final, también se elimina la variabilidad proveniente de ellos.
+No obstante en el presente análisis no se verificó mediante análisis o pruebas la hipótesis anterior y tampoco se verificó (en caso de ser correcta la hipotesis), qué predictor o predictores provocaban la variabilidad.
+
+## Selección de variables y ajuste de modelo final
+
+```{r}
+mod_PAD_final = step(mod_PAD, direction = "backward", test = "F")
+summary(mod_PAD_final)
+```
+
+Se realizó el proceso con la función `stepAIC` con `backward` que conservó la edad, el género, el peso, el consumo de nicotina y la interacción entre el género y el peso.
+Altura, horas de sueño, tiempo desde la última ingesta, cafeína, actividad física y hora de medición no mejoraron el modelo.
+Al analizar con detalle el procedimiento llevado a cabo por la función, se concluye que la interacción entre género y peso, género y consumo de nicotina no tienen un aporte significativo para el ajuste del modelo y por tanto, se ajusta el modelo final únicamente con edad y con peso.
+Un mayor peso se asoció con una mayor PAD.
+
+Se tomó la decisión de conservar edad con un p-value de 0.058770, o sea que se encuentra muy cerca de el límite de no rechazo además, se concluye que aporta información relevante para el ajuste del modelo.
+
+### Análisis del modelo final
+
+```{r}
+mod_PAD2 <- lm(PAD_mmHg ~ Edad_anios + Peso_kg, data = Datos)
+```
+
+### Verificación de supuestos del modelo
+
+El modelo final `mod_PAD2` cumplió con los supuestos de Homocedasticidad, Multicolinealidad y Linealidad, pero incumplió el supuesto de Normalidad
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_PAD2$fit, mod_PAD2$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_PAD2, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_PAD2$res, ylab = "Residuales")
+
+shapiro.test(mod_PAD2$res)
+```
+
+#### Multicolinealidad
+
+```{r}
+vif(mod_PAD2)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_PAD2, main = "Residuales parciales", ylab = "")
+```
+
+### Aplicación de transformación de Box-Cox
+
+```{r}
+bc_mod_PAD2 <- boxcox(mod_PAD2)
+lambda_optimo_PAD2 <- bc_mod_PAD2$x[which.max(bc_mod_PAD2$y)]
+abline(v = 0, col = "red")
+
+lambda_optimo_PAD2
+```
+
+Debido a que lambda es cercano a 0, se aplicó la transformación logarítmica a la variable respuesta.
+
+```{r}
+mod_PAD2_trans <- lm(log(PAD_mmHg) ~ Edad_anios + Peso_kg, data = Datos)
+```
+
+### Verificación de supuesto del modelo transformado
+
+El modelo final `mod_PAD2_trans` cumplió con todos los supuestos: Homocedasticidad, Normalidad, Multicolinealidad y Linealidad.
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_PAD2_trans$fit, mod_PAD2_trans$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_PAD2_trans, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_PAD2_trans$res, ylab = "Residuales")
+
+shapiro.test(mod_PAD2_trans$res)
+```
+
+#### Multicolinealidad
+
+```{r}
+vif(mod_PAD2_trans)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_PAD2_trans, main = "Residuales parciales", ylab = "")
+```
+
+### Análisis Final e Intervalos de Confianza
+
+```{r}
+summary(mod_PAD2_trans)
+round(confint(mod_PAD2_trans), 3)
+```
+
+Manteniendo el peso constante, la presión arterialdiastólica (PAD) promedio aumenta un 0.85% por cada año adicional de edad.
+Con un 95% de confianza, se espera que este aumento en la PAD promedio se ubique entre 0.00% y 1.71% por cada año extra de edad, con ese mismo nivel de peso.
+Por cada kilogramo de aumento en el peso, la presión arterial diastólica promedio aumenta un 0.27%, asumiendo que se compara a personas de la misma edad.
+Con un 95% de confianza, este incremento promedio en la PAD se ubica entre 0.10% y 0.40% por cada kilogramo extra de peso.
+La edad y el peso en conjunto logran explicar el 15.75% de la variabilidad total observada en la presión arterial diastólica.

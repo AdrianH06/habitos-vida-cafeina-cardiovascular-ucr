@@ -1,0 +1,207 @@
+---
+title: "07. Análisis de modelo de frecuencia cardiaca con peso"
+format: pdf
+editor: visual
+---
+
+## Librerías
+
+```{r}
+library(here)
+library(dplyr)
+library(modelsummary)
+library(ggplot2)
+library(car)
+library(corrgram)
+library(lattice)
+library(lmtest)
+library(MASS)
+```
+
+## Ruta y Datos
+
+```{r}
+RUTA <- here("Datos", "Datos_limpios.rds")
+Datos <- readRDS(RUTA)
+```
+
+### Ajuste de tipo de datos en factoress
+
+```{r}
+Datos$Genero <- factor(Datos$Genero, levels = c("Masculino","Femenino"))
+```
+
+Originalmente la variable Consumo_nicotina_frecuencia contaba con 7 categorías: "no consume nicotina"; "nicotina sin combustión de 1 a 3 días"; "nicotina sin combustión de 4 a 6 días"; "nicotina sin combustión diariamente; "nicotina con combustión de 1 a 3 días";"nicotina con combustión de 4 a 6 días" y "nicotina con combustión diariamente". No obstante al tener categorías con cero observaciones y un des balance tan pronunciado se optó por reducirlo a sólo 3 categorías: "No consume nicotina"; "Nicotina sin combustión" y "Nicotina con combustión".
+
+```{r}
+Datos <- Datos %>%
+  mutate(Consumo_nicotina_frecuencia = case_when(Consumo_nicotina_frecuencia == "No consume nicotina" ~ "No consume nicotina", startsWith(Consumo_nicotina_frecuencia, "No Combustión") ~ "Nicotina sin combustion", TRUE ~ "Nicotina con combustion")) 
+
+Datos$Consumo_nicotina_frecuencia <- factor(Datos$Consumo_nicotina_frecuencia, levels = c("No consume nicotina", "Nicotina sin combustion", "Nicotina con combustion"))
+```
+
+## Modelo para la Presión Arterial Sistólica (PAS)
+
+### Ajuste del primer modelo
+
+Se ajusta el modelo con todas las variables excepto el diagnóstico previo de hipertensión, ya que el 100% de la muestra dijo no tener diagnóstico previo y por lo tanto la variable no puede aportar ninguna información.
+
+```{r}
+mod_FC <- lm(FC_lpm ~ Edad_anios + Genero + Altura_cm + Peso_kg + Horas_sueno +
+                  Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana +
+                  Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora +
+                  Cafeina_total_mg_semana*Consumo_nicotina_frecuencia +
+                  Cafeina_total_mg_semana*Tiempo_desde_ultima_ingesta_horas +
+                  Genero*Peso_kg, data = Datos)
+```
+
+```{r}
+n = nrow(Datos)
+p_fc = length(coef(mod_FC))
+c(parametros = p_fc, obs_por_parametro = n / p_fc)
+```
+
+### Análisis de residuales estudentizados y casos de influencia
+
+No se identificaron valores extremos en la respuesta, ya que ningún residual superó el valor crítico de Bonferroni.
+Ninguna observación alcanzó la primera línea de referencia de la distancia de Cook, por lo que no hay observaciones con influencia global.
+Algunas observaciones superaron los límites de DFFITS y DFBETAS, no obstante, al reajustar el modelo sin ellas, los coeficientes cambiaron de manera muy leve y las conclusiones se mantuvieron.
+Por lo tanto, no se eliminó ninguna observación.
+
+### Residuales Estudentizados
+
+```{r}
+t_fc = rstudent(mod_FC)
+tc_fc = qt(1 - 0.05/(2*n), n - p_fc - 1)
+plot(t_fc, ylab = "Residual estudentizado"); abline(h = c(-tc_fc, tc_fc), col = 2)
+Datos$t_fc = t_fc
+subset(Datos, abs(t_fc) > tc_fc)
+```
+
+### DFFITS
+
+```{r}
+plot(abs(dffits(mod_FC)), ylab = "DFFITS")
+abline(h = 2*sqrt((p_fc + 1)/(n - p_fc - 1)), col = 2)
+```
+
+### Distancia de Cook
+
+```{r}
+plot(cooks.distance(mod_FC), ylab = "Distancia de Cook")
+abline(h = qf(c(0.1, 0.2, 0.5), p_fc, n - p_fc), col = c(1, 4, 2))
+```
+
+### DFBETAS
+
+```{r}
+dfb_fc = dfbetas(mod_FC)
+
+plot(abs(dfb_fc[, 2]), main = colnames(dfb_fc)[2], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 3]), main = colnames(dfb_fc)[3], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 4]), main = colnames(dfb_fc)[4], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 5]), main = colnames(dfb_fc)[5], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 6]), main = colnames(dfb_fc)[6], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 7]), main = colnames(dfb_fc)[7], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 8]), main = colnames(dfb_fc)[8], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 9]), main = colnames(dfb_fc)[9], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 10]), main = colnames(dfb_fc)[10], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 11]), main = colnames(dfb_fc)[11], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 12]), main = colnames(dfb_fc)[12], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 13]), main = colnames(dfb_fc)[13], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 14]), main = colnames(dfb_fc)[14], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 15]), main = colnames(dfb_fc)[15], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+plot(abs(dfb_fc[, 16]), main = colnames(dfb_fc)[16], ylab = "", pch = 18); abline(h = 2/sqrt(n), col = 2)
+```
+
+### Verificación de supuestos del modelo
+
+El modelo inicial `mod_FC` cumplió con todos los supuestos: Homocedasticidad, Normalidad, Multicolinealidad y Linealidad.
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_FC$fit, mod_FC$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_FC, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_FC$res, ylab = "Residuales")
+
+shapiro.test(mod_FC$res)
+```
+
+### Ajuste de modelo sin interacciones para verificación de supuestos
+
+```{r}
+mod_FC_no_in <- lm(FC_lpm ~ Edad_anios + Genero + Altura_cm + Peso_kg + Horas_sueno + Tiempo_desde_ultima_ingesta_horas + Cafeina_total_mg_semana + Godin_Shephard_score + Consumo_nicotina_frecuencia + Hora,data = Datos)
+```
+
+#### Multicolinealidad
+
+```{r}
+vif(mod_FC_no_in)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_FC_no_in, main = "Residuales parciales", ylab = "")
+```
+
+## Selección de variables y ajuste de modelo final
+
+```{r}
+mod_FC_final = step(mod_FC, direction = "backward", test = "F")
+summary(mod_FC_final)
+```
+
+Se realizó el procesocon la función `stepAIC` con `backward` que conservó la edad, el género, el peso, la atividad física, la hora y la interacción entre el género y el peso.
+Horas de sueño, tiempo desde la última ingesta, cafeína y nicotina no mejoraron el modelo.
+Al analizar con detalle el procedimiento llevado a cabo por la función, se concluye que edad, hora, peso, género y la interacción entre género y peso no tienen un aporte significativo para el ajuste del modelo y por tanto, se ajusta el modelo final únicamente la actividad física.
+
+### Análisis del modelo final
+
+```{r}
+mod_FC2 <- lm(FC_lpm ~ Godin_Shephard_score, data = Datos)
+```
+
+### Verificación de supuestos del modelo
+
+El modelo inicial `mod_FC2` cumplió con todos los supuestos: Homocedasticidad, Normalidad, Multicolinealidad y Linealidad.
+
+#### Homocedasticidad
+
+```{r}
+plot(mod_FC2$fit, mod_FC2$res, xlab = "Valores ajustados", ylab = "Residuales")
+
+bptest(mod_FC2, studentize = F)
+```
+
+#### Normalidad
+
+```{r}
+qqPlot(mod_FC2$res, ylab = "Residuales")
+
+shapiro.test(mod_FC2$res)
+```
+
+#### Linealidad
+
+```{r}
+crPlots(mod_FC2, main = "Residuales parciales", ylab = "")
+```
+
+### Análisis Final e Intervalos de Confianza
+
+```{r}
+summary(mod_FC2)
+round(confint(mod_FC2), 3)
+```
+
+Por cada punto adicional en el Godin-Shephard score, la frecuencia cardíaca (FC) promedio disminuye en 0.147 latidos por minuto (lpm).
+Con un 95% de confianza, se espera que esta disminución promedio en la FC se ubique entre 0.045 y 0.248 lpm por cada punto extra en dicho score de actividad física.
+El nivel de actividad física por sí solo logra explicar el 7.07% de la variabilidad total observada en la frecuencia cardiaca
